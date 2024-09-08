@@ -1,6 +1,5 @@
 import { html, render } from 'lit-html';
 import { Subject } from 'rxjs';
-import nipplejs from 'nipplejs';
 import 'aframe';
 
 export class VirtualMicrobit {
@@ -13,7 +12,7 @@ export class VirtualMicrobit {
 
   constructor(private container: HTMLElement) {
     this.initializeAFrame();
-    this.initializeNippleJS();
+    this.initializeTouchControls();
     this.initializeDisplay();
     this.initializeAccelerometer();
     this.initializeCompass();
@@ -24,38 +23,65 @@ export class VirtualMicrobit {
     scene.setAttribute('embedded', '');
     scene.innerHTML = `
       <a-assets>
-        <a-asset-item id="microbit-model" src="path/to/your/microbit-model.gltf"></a-asset-item>
+        <a-asset-item id="microbit-model" src="assets/microbit.glb"></a-asset-item>
       </a-assets>
-      <a-entity gltf-model="#microbit-model" position="0 0 -5" rotation="0 0 0"></a-entity>
+      <a-entity gltf-model="#microbit-model" position="0 0 0" scale="10 10 10" rotation="0 0 0"></a-entity>
       <a-camera></a-camera>
     `;
+
     this.container.appendChild(scene);
   }
 
-  private initializeNippleJS() {
-    const buttonAZone = document.createElement('div');
-    const buttonBZone = document.createElement('div');
-    this.container.appendChild(buttonAZone);
-    this.container.appendChild(buttonBZone);
+    private initializeTouchControls() {
+    const buttonA = this.createButton('A', '10%', '90%');
+    const buttonB = this.createButton('B', '90%', '90%');
 
-    const buttonA = nipplejs.create({
-      zone: buttonAZone,
-      mode: 'static',
-      position: { left: '25%', top: '75%' }
+    this.container.appendChild(buttonA);
+    this.container.appendChild(buttonB);
+
+    this.setupButtonEvents(buttonA, this.buttonASubject);
+    this.setupButtonEvents(buttonB, this.buttonBSubject);
+
+    // Setup AB button logic
+    let aPressed = false;
+    let bPressed = false;
+
+    this.buttonASubject.subscribe(pressed => {
+      aPressed = pressed;
+      this.buttonABSubject.next(aPressed && bPressed);
     });
 
-    const buttonB = nipplejs.create({
-      zone: buttonBZone,
-      mode: 'static',
-      position: { left: '75%', top: '75%' }
+    this.buttonBSubject.subscribe(pressed => {
+      bPressed = pressed;
+      this.buttonABSubject.next(aPressed && bPressed);
     });
+  }
 
-    buttonA.on('start', () => this.buttonASubject.next(true));
-    buttonA.on('end', () => this.buttonASubject.next(false));
-    buttonB.on('start', () => this.buttonBSubject.next(true));
-    buttonB.on('end', () => this.buttonBSubject.next(false));
+  private createButton(label: string, left: string, top: string): HTMLElement {
+    const button = document.createElement('div');
+    button.textContent = label;
+    button.style.position = 'absolute';
+    button.style.left = left;
+    button.style.top = top;
+    button.style.width = '50px';
+    button.style.height = '50px';
+    button.style.borderRadius = '25px';
+    button.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
+    button.style.display = 'flex';
+    button.style.justifyContent = 'center';
+    button.style.alignItems = 'center';
+    button.style.userSelect = 'none';
+    return button;
+  }
 
-    // Implement logic for A+B press
+  private setupButtonEvents(button: HTMLElement, subject: Subject<boolean>) {
+    const pressButton = () => subject.next(true);
+    const releaseButton = () => subject.next(false);
+
+    button.addEventListener('touchstart', pressButton);
+    button.addEventListener('touchend', releaseButton);
+    button.addEventListener('mousedown', pressButton);
+    button.addEventListener('mouseup', releaseButton);
   }
 
   private initializeDisplay() {
@@ -66,11 +92,11 @@ export class VirtualMicrobit {
     display.style.transform = 'translate(-50%, -50%)';
     display.style.display = 'grid';
     display.style.gridTemplateColumns = 'repeat(5, 1fr)';
-    display.style.gap = '5px';
+    display.style.gap = '10px';
 
     for (let i = 0; i < 25; i++) {
       const led = document.createElement('div');
-      led.style.width = '20px';
+      led.style.width = '10px';
       led.style.height = '20px';
       led.style.backgroundColor = 'darkred';
       display.appendChild(led);
