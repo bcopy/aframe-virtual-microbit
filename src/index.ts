@@ -1,0 +1,1 @@
+export { VirtualMicrobit } from './VirtualMicrobit';
