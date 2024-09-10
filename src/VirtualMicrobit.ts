@@ -1,146 +1,141 @@
 import { html, render } from 'lit-html';
-import { Subject } from 'rxjs';
+import { Subject, BehaviorSubject } from 'rxjs';
 import 'aframe';
 
+declare global {
+  namespace JSX {
+    interface IntrinsicElements {
+      'a-scene': any;
+      'a-entity': any;
+      'a-assets': any;
+      'a-asset-item': any;
+      'a-light': any;
+    }
+  }
+}
+
 export class VirtualMicrobit {
-  private buttonASubject = new Subject<boolean>();
-  private buttonBSubject = new Subject<boolean>();
-  private buttonABSubject = new Subject<boolean>();
-  private displaySubject = new Subject<string>();
-  private accelerometerSubject = new Subject<{x: number, y: number, z: number}>();
-  private compassSubject = new Subject<number>();
+  private buttonASubject: BehaviorSubject<boolean>;
+  private buttonBSubject: BehaviorSubject<boolean>;
+  private buttonABSubject: BehaviorSubject<boolean>;
+  private displaySubject: Subject<string>;
+  private accelerometerSubject: Subject<{x: number, y: number, z: number}>;
+  private compassSubject: Subject<number>;
+
+  private scene: HTMLElement;
+  private ledEntities: HTMLElement[];
 
   constructor(private container: HTMLElement) {
+    this.buttonASubject = new BehaviorSubject<boolean>(false);
+    this.buttonBSubject = new BehaviorSubject<boolean>(false);
+    this.buttonABSubject = new BehaviorSubject<boolean>(false);
+    this.displaySubject = new Subject<string>();
+    this.accelerometerSubject = new Subject<{x: number, y: number, z: number}>();
+    this.compassSubject = new Subject<number>();
+
+    this.scene = document.createElement('a-scene');
+    this.ledEntities = [];
+
     this.initializeAFrame();
-    this.initializeTouchControls();
-    this.initializeDisplay();
     this.initializeAccelerometer();
     this.initializeCompass();
+    this.setupResizeHandler();
   }
 
   private initializeAFrame() {
-    const scene = document.createElement('a-scene');
-    // scene.setAttribute('embedded', '');
+    this.scene.setAttribute('embedded', '');
     
-    // Create asset management system
-    const assets = document.createElement('a-assets');
-    
-    // Add the Micro:bit model to assets
-    const microbitModelAsset = document.createElement('a-asset-item');
-    microbitModelAsset.id = 'microbit-model';
-    microbitModelAsset.setAttribute('src', 'assets/microbit.glb');
-    assets.appendChild(microbitModelAsset);
-    
-    // Append assets to the scene
-    scene.appendChild(assets);
-    
-    // Add the Micro:bit model entity
-    const microbitModel = html`<a-entity id='microbit' gltf-model='#microbit-model' 
-      position='0 -4 -25' rotation='0 0 0' scale='0.8 0.8 0.8'>`
-    render(microbitModel, scene);
-    
-    // Add a fixed camera
-    const camera = document.createElement('a-entity');
-    camera.setAttribute('camera', '');
-    camera.setAttribute('position', '0 0 2'); // Adjust this value to change the distance from the model
-    camera.setAttribute('look-at', '#microbit');
-    
-    // Remove look controls
-    camera.setAttribute('look-controls', 'enabled: false');
-    
-    // Remove WASD controls
-    camera.setAttribute('wasd-controls', 'enabled: false');
-    
-    scene.appendChild(camera);
-    
-    // Add lights
-    const ambientLight = document.createElement('a-light');
-    ambientLight.setAttribute('type', 'ambient');
-    ambientLight.setAttribute('color', '#BBB');
-    scene.appendChild(ambientLight);
-    
-    const directionalLight = document.createElement('a-light');
-    directionalLight.setAttribute('type', 'directional');
-    directionalLight.setAttribute('color', '#FFF');
-    directionalLight.setAttribute('intensity', '0.4');
-    directionalLight.setAttribute('position', '-0.5 1 1');
-    scene.appendChild(directionalLight);
-    
-    this.container.appendChild(scene);
+    const sceneTemplate = html`
+      <a-assets>
+        <a-asset-item id="microbit-model" src="assets/microbit.glb"></a-asset-item>
+      </a-assets>
+
+      <a-entity id="microbit" gltf-model="#microbit-model" position="0 -3 -22" rotation="0 0 0" scale="0.8 0.8 0.8"></a-entity>
+
+      ${this.createLEDDisplay()}
+      ${this.createButtons()}
+
+      <a-entity camera position="0 0 0" look-controls="enabled: false" wasd-controls="enabled: false"></a-entity>
+      
+      <a-light type="ambient" color="#BBB"></a-light>
+      <a-light type="directional" color="#FFF" intensity="0.6" position="-0.5 1 1"></a-light>
+    `;
+
+    render(sceneTemplate, this.scene);
+    this.container.appendChild(this.scene);
   }
 
-
-  private initializeTouchControls() {
-    const buttonA = this.createButton('A', '10%', '40%');
-    const buttonB = this.createButton('B', '90%', '40%');
-
-    this.container.appendChild(buttonA);
-    this.container.appendChild(buttonB);
-
-    this.setupButtonEvents(buttonA, this.buttonASubject);
-    this.setupButtonEvents(buttonB, this.buttonBSubject);
-
-    // Setup AB button logic
-    let aPressed = false;
-    let bPressed = false;
-
-    this.buttonASubject.subscribe(pressed => {
-      aPressed = pressed;
-      this.buttonABSubject.next(aPressed && bPressed);
-    });
-
-    this.buttonBSubject.subscribe(pressed => {
-      bPressed = pressed;
-      this.buttonABSubject.next(aPressed && bPressed);
-    });
+  private createLEDDisplay() {
+    return html`
+      <a-entity id="led-display" position="0 0.02 -0.49">
+        ${[...Array(5)].map((_, i) =>
+          [...Array(5)].map((_, j) => html`
+            <a-entity
+              geometry="primitive: sphere; radius: 0.005"
+              material="color: #300000; emissive: #300000"
+              position="${(j - 2) * 0.015} ${(2 - i) * 0.015} 0"
+              @created=${(e: CustomEvent) => this.ledEntities.push(e.target as HTMLElement)}
+            ></a-entity>
+          `)
+        )}
+      </a-entity>
+    `;
   }
 
-  private createButton(label: string, left: string, top: string): HTMLElement {
-    const button = document.createElement('div');
-    button.textContent = label;
-    button.style.position = 'absolute';
-    button.style.left = left;
-    button.style.top = top;
-    button.style.width = '100px';
-    button.style.height = '100px';
-    button.style.borderRadius = '25px';
-    button.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
-    button.style.display = 'flex';
-    button.style.justifyContent = 'center';
-    button.style.alignItems = 'center';
-    button.style.userSelect = 'none';
-    return button;
+  private createButtons() {
+    return html`
+      <a-entity
+        id="button-a"
+        geometry="primitive: cylinder; radius: 0.01; height: 0.005"
+        material="color: #4CAF50"
+        position="-0.04 -0.04 -0.49"
+        text="value: A; align: center; width: 0.1; color: white; zOffset: 0.003"
+        @mousedown=${() => this.buttonPress('A', true)}
+        @mouseup=${() => this.buttonPress('A', false)}
+        @mouseleave=${() => this.buttonPress('A', false)}
+      ></a-entity>
+      <a-entity
+        id="button-b"
+        geometry="primitive: cylinder; radius: 0.01; height: 0.005"
+        material="color: #4CAF50"
+        position="0.04 -0.04 -0.49"
+        text="value: B; align: center; width: 0.1; color: white; zOffset: 0.003"
+        @mousedown=${() => this.buttonPress('B', true)}
+        @mouseup=${() => this.buttonPress('B', false)}
+        @mouseleave=${() => this.buttonPress('B', false)}
+      ></a-entity>
+    `;
   }
 
-  private setupButtonEvents(button: HTMLElement, subject: Subject<boolean>) {
-    const pressButton = () => subject.next(true);
-    const releaseButton = () => subject.next(false);
+  private buttonPress(button: 'A' | 'B', isPressed: boolean) {
+    const buttonEntity = this.scene.querySelector(`#button-${button.toLowerCase()}`) as HTMLElement;
+    buttonEntity.setAttribute('material', `color: ${isPressed ? '#45a049' : '#4CAF50'}`);
 
-    button.addEventListener('touchstart', pressButton);
-    button.addEventListener('touchend', releaseButton);
-    button.addEventListener('mousedown', pressButton);
-    button.addEventListener('mouseup', releaseButton);
-  }
-
-  private initializeDisplay() {
-    const display = document.createElement('div');
-    display.style.position = 'absolute';
-    display.style.top = '50%';
-    display.style.left = '50%';
-    display.style.transform = 'translate(-50%, -50%)';
-    display.style.display = 'grid';
-    display.style.gridTemplateColumns = 'repeat(5, 1fr)';
-    display.style.gap = '30px';
-
-    for (let i = 0; i < 25; i++) {
-      const led = document.createElement('div');
-      led.style.width = '50px';
-      led.style.height = '60px';
-      led.style.backgroundColor = 'darkred';
-      display.appendChild(led);
+    if (button === 'A') {
+      this.buttonASubject.next(isPressed);
+    } else {
+      this.buttonBSubject.next(isPressed);
     }
 
-    this.container.appendChild(display);
+    const aPressed = this.buttonASubject.value;
+    const bPressed = this.buttonBSubject.value;
+    this.buttonABSubject.next(aPressed && bPressed);
+  }
+
+  private setupResizeHandler() {
+    window.addEventListener('resize', () => {
+      this.centerElements();
+    });
+  }
+
+  private centerElements() {
+    const width = window.innerWidth;
+    const height = window.innerHeight;
+    const aspect = width / height;
+    const camera = this.scene.querySelector('[camera]') as any;
+    camera.setAttribute('aspect', aspect.toString());
+    camera.setAttribute('fov', '60');
+    camera.object3D.updateProjectionMatrix();
   }
 
   private initializeAccelerometer() {
@@ -151,10 +146,17 @@ export class VirtualMicrobit {
     // Implement compass logic using device orientation API if available
   }
 
-  // Public methods to interact with the virtual Micro:bit
-
   public setDisplay(pattern: string) {
-    // Implement logic to update the LED display based on the input pattern
+    const rows = pattern.split('\n');
+    rows.forEach((row, i) => {
+      for (let j = 0; j < row.length; j++) {
+        const index = i * 5 + j;
+        if (index < this.ledEntities.length) {
+          const brightness = row[j] === '#' ? 1 : 0;
+          this.ledEntities[index].setAttribute('material', `emissive: #${brightness.toString(16).repeat(2)}0000`);
+        }
+      }
+    });
     this.displaySubject.next(pattern);
   }
 
