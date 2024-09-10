@@ -20,21 +20,59 @@ export class VirtualMicrobit {
 
   private initializeAFrame() {
     const scene = document.createElement('a-scene');
-    scene.setAttribute('embedded', '');
-    scene.innerHTML = `
-      <a-assets>
-        <a-asset-item id="microbit-model" src="assets/microbit.glb"></a-asset-item>
-      </a-assets>
-      <a-entity gltf-model="#microbit-model" position="0 0 0" scale="10 10 10" rotation="0 0 0"></a-entity>
-      <a-camera></a-camera>
-    `;
-
+    // scene.setAttribute('embedded', '');
+    
+    // Create asset management system
+    const assets = document.createElement('a-assets');
+    
+    // Add the Micro:bit model to assets
+    const microbitModelAsset = document.createElement('a-asset-item');
+    microbitModelAsset.id = 'microbit-model';
+    microbitModelAsset.setAttribute('src', 'assets/microbit.glb');
+    assets.appendChild(microbitModelAsset);
+    
+    // Append assets to the scene
+    scene.appendChild(assets);
+    
+    // Add the Micro:bit model entity
+    const microbitModel = html`<a-entity id='microbit' gltf-model='#microbit-model' 
+      position='0 -4 -25' rotation='0 0 0' scale='0.8 0.8 0.8'>`
+    render(microbitModel, scene);
+    
+    // Add a fixed camera
+    const camera = document.createElement('a-entity');
+    camera.setAttribute('camera', '');
+    camera.setAttribute('position', '0 0 2'); // Adjust this value to change the distance from the model
+    camera.setAttribute('look-at', '#microbit');
+    
+    // Remove look controls
+    camera.setAttribute('look-controls', 'enabled: false');
+    
+    // Remove WASD controls
+    camera.setAttribute('wasd-controls', 'enabled: false');
+    
+    scene.appendChild(camera);
+    
+    // Add lights
+    const ambientLight = document.createElement('a-light');
+    ambientLight.setAttribute('type', 'ambient');
+    ambientLight.setAttribute('color', '#BBB');
+    scene.appendChild(ambientLight);
+    
+    const directionalLight = document.createElement('a-light');
+    directionalLight.setAttribute('type', 'directional');
+    directionalLight.setAttribute('color', '#FFF');
+    directionalLight.setAttribute('intensity', '0.4');
+    directionalLight.setAttribute('position', '-0.5 1 1');
+    scene.appendChild(directionalLight);
+    
     this.container.appendChild(scene);
   }
 
-    private initializeTouchControls() {
-    const buttonA = this.createButton('A', '10%', '90%');
-    const buttonB = this.createButton('B', '90%', '90%');
+
+  private initializeTouchControls() {
+    const buttonA = this.createButton('A', '10%', '40%');
+    const buttonB = this.createButton('B', '90%', '40%');
 
     this.container.appendChild(buttonA);
     this.container.appendChild(buttonB);
@@ -63,8 +101,8 @@ export class VirtualMicrobit {
     button.style.position = 'absolute';
     button.style.left = left;
     button.style.top = top;
-    button.style.width = '50px';
-    button.style.height = '50px';
+    button.style.width = '100px';
+    button.style.height = '100px';
     button.style.borderRadius = '25px';
     button.style.backgroundColor = 'rgba(255, 255, 255, 0.5)';
     button.style.display = 'flex';
@@ -87,17 +125,17 @@ export class VirtualMicrobit {
   private initializeDisplay() {
     const display = document.createElement('div');
     display.style.position = 'absolute';
-    display.style.top = '20%';
+    display.style.top = '50%';
     display.style.left = '50%';
     display.style.transform = 'translate(-50%, -50%)';
     display.style.display = 'grid';
     display.style.gridTemplateColumns = 'repeat(5, 1fr)';
-    display.style.gap = '10px';
+    display.style.gap = '30px';
 
     for (let i = 0; i < 25; i++) {
       const led = document.createElement('div');
-      led.style.width = '10px';
-      led.style.height = '20px';
+      led.style.width = '50px';
+      led.style.height = '60px';
       led.style.backgroundColor = 'darkred';
       display.appendChild(led);
     }
