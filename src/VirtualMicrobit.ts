@@ -1,6 +1,7 @@
 import { html, render } from 'lit-html';
 import { Subject, BehaviorSubject } from 'rxjs';
 import 'aframe';
+import * as THREE from 'three';
 
 declare global {
   namespace JSX {
@@ -14,6 +15,29 @@ declare global {
   }
 }
 
+interface AFrameComponentInitializedEvent extends Event {
+  detail: {
+    name: string;
+    data: any;
+    target: AFrameEntity;
+  };
+}
+
+interface AFrameComponent {
+  el: AFrameEntity;
+  [key: string]: any;
+}
+
+interface AFrameEntity extends HTMLElement {
+  object3D: THREE.Object3D;
+  setAttribute: (name: string, value: any) => void;
+  getAttribute: (name: string) => any;
+  components: {
+    [key: string]: AFrameComponent;
+  };
+}
+
+
 export class VirtualMicrobit {
   private buttonASubject: BehaviorSubject<boolean>;
   private buttonBSubject: BehaviorSubject<boolean>;
@@ -22,8 +46,8 @@ export class VirtualMicrobit {
   private accelerometerSubject: Subject<{x: number, y: number, z: number}>;
   private compassSubject: Subject<number>;
 
-  private scene: HTMLElement;
-  private ledEntities: HTMLElement[];
+  private scene: AFrameEntity;
+  private ledEntities: AFrameEntity[] = [];
 
   constructor(private container: HTMLElement) {
     this.buttonASubject = new BehaviorSubject<boolean>(false);
@@ -33,9 +57,7 @@ export class VirtualMicrobit {
     this.accelerometerSubject = new Subject<{x: number, y: number, z: number}>();
     this.compassSubject = new Subject<number>();
 
-    this.scene = document.createElement('a-scene');
-    this.ledEntities = [];
-
+    this.scene = document.createElement('a-scene') as AFrameEntity;
     this.initializeAFrame();
     this.initializeAccelerometer();
     this.initializeCompass();
@@ -50,10 +72,11 @@ export class VirtualMicrobit {
         <a-asset-item id="microbit-model" src="assets/microbit.glb"></a-asset-item>
       </a-assets>
 
-      <a-entity id="microbit" gltf-model="#microbit-model" position="0 -3 -22" rotation="0 0 0" scale="0.8 0.8 0.8"></a-entity>
-
-      ${this.createLEDDisplay()}
-      ${this.createButtons()}
+      <a-entity id="microbit-group" position="0 0 -0.5">
+        <a-entity id="microbit-model" gltf-model="#microbit-model" position="0 -3 -30" rotation="0 0 0" scale="1 1 1"></a-entity>
+        ${this.createLEDDisplay()}
+        ${this.createButtons()}
+      </a-entity>
 
       <a-entity camera position="0 0 0" look-controls="enabled: false" wasd-controls="enabled: false"></a-entity>
       
@@ -67,14 +90,14 @@ export class VirtualMicrobit {
 
   private createLEDDisplay() {
     return html`
-      <a-entity id="led-display" position="0 0.02 -0.49">
+      <a-entity id="led-display" position="0 0.02 0.01">
         ${[...Array(5)].map((_, i) =>
           [...Array(5)].map((_, j) => html`
             <a-entity
               geometry="primitive: sphere; radius: 0.005"
               material="color: #300000; emissive: #300000"
               position="${(j - 2) * 0.015} ${(2 - i) * 0.015} 0"
-              @created=${(e: CustomEvent) => this.ledEntities.push(e.target as HTMLElement)}
+              @created=${(e: CustomEvent) => this.ledEntities.push(e.target as AFrameEntity)}
             ></a-entity>
           `)
         )}
@@ -88,7 +111,7 @@ export class VirtualMicrobit {
         id="button-a"
         geometry="primitive: cylinder; radius: 0.01; height: 0.005"
         material="color: #4CAF50"
-        position="-0.04 -0.04 -0.49"
+        position="-0.04 -0.04 0.01"
         text="value: A; align: center; width: 0.1; color: white; zOffset: 0.003"
         @mousedown=${() => this.buttonPress('A', true)}
         @mouseup=${() => this.buttonPress('A', false)}
@@ -98,7 +121,7 @@ export class VirtualMicrobit {
         id="button-b"
         geometry="primitive: cylinder; radius: 0.01; height: 0.005"
         material="color: #4CAF50"
-        position="0.04 -0.04 -0.49"
+        position="0.04 -0.04 0.01"
         text="value: B; align: center; width: 0.1; color: white; zOffset: 0.003"
         @mousedown=${() => this.buttonPress('B', true)}
         @mouseup=${() => this.buttonPress('B', false)}
@@ -108,7 +131,7 @@ export class VirtualMicrobit {
   }
 
   private buttonPress(button: 'A' | 'B', isPressed: boolean) {
-    const buttonEntity = this.scene.querySelector(`#button-${button.toLowerCase()}`) as HTMLElement;
+    const buttonEntity = this.scene.querySelector(`#button-${button.toLowerCase()}`) as AFrameEntity;
     buttonEntity.setAttribute('material', `color: ${isPressed ? '#45a049' : '#4CAF50'}`);
 
     if (button === 'A') {
@@ -132,10 +155,32 @@ export class VirtualMicrobit {
     const width = window.innerWidth;
     const height = window.innerHeight;
     const aspect = width / height;
-    const camera = this.scene.querySelector('[camera]') as any;
-    camera.setAttribute('aspect', aspect.toString());
-    camera.setAttribute('fov', '60');
-    camera.object3D.updateProjectionMatrix();
+    const camera = this.scene.querySelector('[camera]') as AFrameEntity;
+    
+    if (camera) {
+      camera.setAttribute('aspect', aspect.toString());
+      camera.setAttribute('fov', '60');
+      
+      if (camera.components && camera.components.camera) {
+        const cameraComponent = camera.components.camera;
+        if (cameraComponent.camera && typeof cameraComponent.camera.updateProjectionMatrix === 'function') {
+          cameraComponent.camera.updateProjectionMatrix();
+        }
+      }
+    }
+
+    // Scale the Micro:bit group to fit the view
+    const microbitGroup = this.scene.querySelector('#microbit-group') as AFrameEntity;
+    if (microbitGroup) {
+      const scale = Math.min(width, height) / 1000; // Adjust this factor as needed
+      microbitGroup.setAttribute('scale', `${scale} ${scale} ${scale}`);
+    }
+
+    // Force A-Frame to update the canvas size
+    const sceneEl = this.scene as any;
+    if (sceneEl.resize) {
+      sceneEl.resize();
+    }
   }
 
   private initializeAccelerometer() {
@@ -159,7 +204,7 @@ export class VirtualMicrobit {
     });
     this.displaySubject.next(pattern);
   }
-
+  
   public onButtonA() {
     return this.buttonASubject.asObservable();
   }

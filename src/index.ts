@@ -16,7 +16,7 @@ document.addEventListener('DOMContentLoaded', () => {
       microbit.setDisplay('10101:01010:00100:01010:10101');
   
     } else {
-      console.error('Container element not found');
+      console.error('Microbit Container element not found');
     }
 
     
